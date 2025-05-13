@@ -60,7 +60,7 @@ class CategoryDetailsView(
         pathEffect = DashPathEffect(
             floatArrayOf(5f, 10f), 0F
         )
-        textSize = 20f
+        textSize = 30f
     }
 
     init {
