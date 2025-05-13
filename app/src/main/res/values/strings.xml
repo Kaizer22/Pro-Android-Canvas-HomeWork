@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">Custom View</string>
+    <string name="pie_chart_spend_text">Потрачено в %1$s</string>
 </resources>
