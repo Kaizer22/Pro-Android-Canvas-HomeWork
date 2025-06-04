@@ -30,6 +30,10 @@ data class CategoryDetailsData(
 data class CategoryDetailsViewState(
     val superState: Parcelable?,
     val data: CategoryDetailsData,
+    val dateStrings: List<String>,
+    val horizontalLinesCount: Int,
+    val horizontalLinesStep: Int,
+    val horizontalLinesStrings: List<String>,
 ) : Parcelable
 
 class CategoryDetailsView(
@@ -64,34 +68,52 @@ class CategoryDetailsView(
     }
 
     init {
-        if (isInEditMode) {
-            setData(
-                CategoryDetailsData(
-                    spends = listOf(
-                        SpendValue(1000, LocalDateTime.now()),
-                        SpendValue(2000, LocalDateTime.now().plusDays(2))
-                    ),
-                    category = "Здоровье"
-                )
+        setData(
+            CategoryDetailsData(
+                spends = listOf(
+                    SpendValue(1000, LocalDateTime.now()),
+                    SpendValue(2000, LocalDateTime.now().plusDays(2))
+                ),
+                category = "Здоровье"
             )
-        }
+        )
     }
 
     fun setData(d: CategoryDetailsData) {
+        val max = d.spends.maxOf { it.amount }
+        maxValue = max + max / 10
+
+        val hLinesCount = maxValue / divisionPrice + 1
+        val hLinesStrings = mutableListOf<String>()
+
+        repeat(hLinesCount) { index ->
+            hLinesStrings.add(
+                (hLinesCount * divisionPrice - divisionPrice * index
+                        ).toString()
+            )
+        }
+
         viewState = CategoryDetailsViewState(
             superState = null,
-            data = d
+            data = d,
+            dateStrings = d.spends.map { it.date.format(DateTimeFormatter.ISO_DATE) },
+            horizontalLinesCount = hLinesCount,
+            horizontalLinesStep = height / hLinesCount,
+            horizontalLinesStrings = hLinesStrings,
         )
-        val max = viewState.data.spends.maxOf { it.amount }
-        maxValue = max + max / 10
+
         requestLayout()
         invalidate()
     }
 
-    override fun onSaveInstanceState(): Parcelable? {
+    override fun onSaveInstanceState(): Parcelable {
         return CategoryDetailsViewState(
             superState = super.onSaveInstanceState(),
             data = viewState.data,
+            dateStrings = viewState.dateStrings,
+            horizontalLinesCount = viewState.horizontalLinesCount,
+            horizontalLinesStep = viewState.horizontalLinesStep,
+            horizontalLinesStrings = viewState.horizontalLinesStrings,
         )
     }
 
@@ -129,7 +151,7 @@ class CategoryDetailsView(
             val x = valueWidth * (index + 1)
             canvas.drawLine(x, 0f, x, height.toFloat(), legendPaint)
             canvas.drawText(
-                viewState.data.spends[index].date.format(DateTimeFormatter.ISO_DATE),
+                viewState.dateStrings[index],
                 x - valueWidth / 2, height.toFloat(),
                 legendPaint
             )
@@ -137,18 +159,16 @@ class CategoryDetailsView(
     }
 
     private fun drawHorizontalLegend(canvas: Canvas) {
-        val horizontalLines = maxValue / divisionPrice + 1
-        val hStep = height / horizontalLines
-        repeat(horizontalLines) { index ->
+        repeat(viewState.horizontalLinesCount) { index ->
             val xStartHorizontal = 0f
-            val yStartHorizontal = (index * hStep).toFloat()
+            val yStartHorizontal = (index * viewState.horizontalLinesStep).toFloat()
             canvas.drawText(
-                (horizontalLines * divisionPrice - divisionPrice * index).toString(),
+                viewState.horizontalLinesStrings[index],
                 xStartHorizontal, yStartHorizontal, legendPaint
             )
             canvas.drawLine(
                 xStartHorizontal, yStartHorizontal,
-                width.toFloat(), (index * hStep).toFloat(),
+                width.toFloat(), (index * viewState.horizontalLinesStep).toFloat(),
                 legendPaint,
             )
         }

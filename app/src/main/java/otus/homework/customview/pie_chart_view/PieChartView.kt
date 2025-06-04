@@ -3,20 +3,18 @@ package otus.homework.customview.pie_chart_view
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
-import android.graphics.LinearGradient
 import android.graphics.Paint
-import android.graphics.Shader
 import android.os.Parcelable
 import android.util.AttributeSet
 import android.view.MotionEvent
 import android.view.View
 import androidx.core.graphics.toColorInt
+import kotlinx.parcelize.IgnoredOnParcel
 import kotlinx.parcelize.Parcelize
 import otus.homework.customview.R
 import kotlin.math.PI
 import kotlin.math.atan2
 import kotlin.math.min
-
 
 @Parcelize
 data class PieChartValue(
@@ -33,11 +31,14 @@ data class PieChartData(
 
 @Parcelize
 data class PieChartViewState(
+    @IgnoredOnParcel
     val onSelectorClickListener: ((PieChartValue?) -> Unit)? = null,
     val selectedSector: Int = -1,
     val superState: Parcelable?,
     val data: PieChartData,
     val amountSum: Int,
+    val monthText: String,
+    val amountText: String,
 ) : Parcelable
 
 private val MONTHS = arrayOf(
@@ -48,19 +49,19 @@ private val MONTHS = arrayOf(
 )
 
 private const val MAX_VALUES_COUNT = 12
-private val GRADIENTS = arrayOf(
-    Pair("#36D1DC".toColorInt(), "#D8B5FF".toColorInt()),
-    Pair("#FFCE00".toColorInt(), "#A6E088".toColorInt()),
-    Pair("#FFBFCB".toColorInt(), "#FFF647".toColorInt()),
-    Pair("#F7B733".toColorInt(), "#FF6A00".toColorInt()),
-    Pair("#FC5E39".toColorInt(), "#F00000".toColorInt()),
-    Pair("#FF758C".toColorInt(), "#C973FF".toColorInt()),
-    Pair("#7F00FF".toColorInt(), "#134E5E".toColorInt()),
-    Pair("#7F55F9".toColorInt(), "#3ED4D9".toColorInt()),
-    Pair("#87D300".toColorInt(), "#4DCF9F".toColorInt()),
-    Pair("#F7FD04".toColorInt(), "#FFA751".toColorInt()),
-    Pair("#FF6A84".toColorInt(), "#FE881E".toColorInt()),
-    Pair("#EC0404".toColorInt(), "#1C1B1B".toColorInt()),
+private val COLORS = arrayOf(
+    "#36D1DC".toColorInt(),
+    "#FFCE00".toColorInt(),
+    "#FFBFCB".toColorInt(),
+    "#F7B733".toColorInt(),
+    "#FC5E39".toColorInt(),
+    "#FF758C".toColorInt(),
+    "#7F00FF".toColorInt(),
+    "#7F55F9".toColorInt(),
+    "#87D300".toColorInt(),
+    "#F7FD04".toColorInt(),
+    "#FF6A84".toColorInt(),
+    "#EC0404".toColorInt(),
 )
 
 class PieChartView @JvmOverloads constructor(
@@ -72,17 +73,16 @@ class PieChartView @JvmOverloads constructor(
 
     private lateinit var viewState: PieChartViewState
 
-    private val randomColorPaint = Paint()
+    private val sectorColorPaint = Paint()
     private val sectorSelectionPaint = Paint().apply {
         color = sectorSelectionColor.toColorInt()
     }
 
-    private fun setGradient(index: Int) = randomColorPaint.setShader(
-        LinearGradient(
-            0f, 0f, width.toFloat(), height.toFloat(),
-            GRADIENTS[index].first, GRADIENTS[index].second, Shader.TileMode.MIRROR
-        )
-    )
+    private var sectorsAngles: MutableList<Pair<Float, Float>> = mutableListOf()
+
+    private fun setColor(index: Int) {
+        sectorColorPaint.color = COLORS[index]
+    }
 
     private val backgroundPaint = Paint().apply {
         color = Color.WHITE
@@ -99,46 +99,44 @@ class PieChartView @JvmOverloads constructor(
     }
 
     init {
-        if (isInEditMode) {
-            setData(
-                PieChartData(
-                    month = 8,
-                    currencySymbol = "₽",
-                    values = listOf(
-                        PieChartValue(
-                            "Test", 1000
-                        ),
-                        PieChartValue(
-                            "Test2", 1000
-                        ),
-                        PieChartValue(
-                            "Test4", 1000,
-                        ),
-                        PieChartValue(
-                            "Test5", 1000,
-                        ),
-                        PieChartValue(
-                            "Test5", 1000,
-                        ),
-                        PieChartValue(
-                            "Test5", 1000,
-                        ),
-                        PieChartValue(
-                            "Test5", 1000,
-                        ),
-                        PieChartValue(
-                            "Test5", 1000,
-                        ),
-                        PieChartValue(
-                            "Test5", 10000,
-                        ),
-                        PieChartValue(
-                            "Test5", 10000,
-                        ),
-                    )
+        setData(
+            PieChartData(
+                month = 8,
+                currencySymbol = "₽",
+                values = listOf(
+                    PieChartValue(
+                        "Test", 1000
+                    ),
+                    PieChartValue(
+                        "Test2", 1000
+                    ),
+                    PieChartValue(
+                        "Test4", 1000,
+                    ),
+                    PieChartValue(
+                        "Test5", 1000,
+                    ),
+                    PieChartValue(
+                        "Test5", 1000,
+                    ),
+                    PieChartValue(
+                        "Test5", 1000,
+                    ),
+                    PieChartValue(
+                        "Test5", 1000,
+                    ),
+                    PieChartValue(
+                        "Test5", 1000,
+                    ),
+                    PieChartValue(
+                        "Test5", 10000,
+                    ),
+                    PieChartValue(
+                        "Test5", 10000,
+                    ),
                 )
             )
-        }
+        )
     }
 
     fun setOnSectorClickListener(listener: (PieChartValue?) -> Unit) {
@@ -153,15 +151,32 @@ class PieChartView @JvmOverloads constructor(
                 "PieChartView: Max values count cannot be greater than $MAX_VALUES_COUNT"
             )
 
+        val sortedData = d.copy(values = d.values.sortedBy { it.amount })
+        val amountSum = d.values.sumBy { it.amount }
         viewState = PieChartViewState(
             superState = null,
-            data = d.copy(values = d.values.sortedBy { it.amount }),
-            amountSum = d.values.sumBy { it.amount }
+            data = sortedData,
+            amountSum = amountSum,
+            monthText = context.getString(
+                R.string.pie_chart_spend_text, MONTHS[sortedData.month]
+            ),
+            amountText = "$amountSum ${sortedData.currencySymbol}",
         )
-
-        calculatedAngles = false
+        calculateSectorsAngles()
         invalidate()
     }
+
+    private fun calculateSectorsAngles() {
+        var currentAngle = 0f
+        sectorsAngles.clear()
+        viewState.data.values.forEach {
+            val angle = (it.amount.toFloat() / viewState.amountSum) * 360f
+            sectorsAngles.add(Pair(currentAngle, currentAngle + angle))
+            currentAngle += angle
+        }
+    }
+
+    private var availableSize = 0
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val wMode = MeasureSpec.getMode(widthMeasureSpec)
@@ -169,6 +184,10 @@ class PieChartView @JvmOverloads constructor(
         val hSize = MeasureSpec.getSize(heightMeasureSpec)
 
         val size = min(wSize, hSize)
+        availableSize = min(
+            size - paddingStart - paddingEnd,
+            size - paddingTop - paddingBottom,
+        )
         when (wMode) {
             MeasureSpec.AT_MOST -> setMeasuredDimension(size, size)
             MeasureSpec.EXACTLY -> setMeasuredDimension(size, size)
@@ -176,24 +195,27 @@ class PieChartView @JvmOverloads constructor(
         }
 
         headerPaint.apply {
-            textSize = size / 8f
+            textSize = availableSize / 8f
         }
         subtitlePaint.apply {
-            textSize = size / 17f
+            textSize = availableSize / 17f
         }
     }
 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
+        canvas.translate(paddingStart.toFloat(), paddingTop.toFloat())
         drawArcs(canvas)
         drawCenter(canvas)
     }
 
-    override fun onSaveInstanceState(): Parcelable? {
+    override fun onSaveInstanceState(): Parcelable {
         return PieChartViewState(
             superState = super.onSaveInstanceState(),
             data = viewState.data,
             amountSum = viewState.amountSum,
+            monthText = viewState.monthText,
+            amountText = viewState.amountText,
         )
     }
 
@@ -216,73 +238,63 @@ class PieChartView @JvmOverloads constructor(
         val normalizedAngle = if (angle < 0) (angle + 2 * PI.toFloat()) else angle
         val degree = normalizedAngle * 180 / PI
 
-        if (calculatedAngles) {
-            sectorsAngles.forEachIndexed { index, sector ->
-                if (sector.first < degree && sector.second > degree) {
-                    val new = if (viewState.selectedSector == index) -1 else
-                        index
-                    viewState = viewState.copy(
-                        selectedSector = new
-                    )
-                    viewState.onSelectorClickListener?.invoke(
-                        viewState.data.values.getOrNull(new)
-                    )
-                }
+        sectorsAngles.forEachIndexed { index, sector ->
+            if (sector.first < degree && sector.second > degree) {
+                val new = if (viewState.selectedSector == index) -1 else
+                    index
+                viewState = viewState.copy(
+                    selectedSector = new
+                )
+                viewState.onSelectorClickListener?.invoke(
+                    viewState.data.values.getOrNull(new)
+                )
             }
-            invalidate()
         }
+        invalidate()
         return super.onTouchEvent(event)
     }
 
-    private var sectorsAngles: MutableList<Pair<Float, Float>> = mutableListOf()
-    private var calculatedAngles = false
-
     private fun drawArcs(canvas: Canvas) {
-        var currentAngle = 0f
         viewState.data.values.forEachIndexed { index, data ->
-            val angle = (data.amount.toFloat() / viewState.amountSum) * 360f
-            if (!calculatedAngles) {
-                sectorsAngles.add(Pair(currentAngle, currentAngle + angle))
-            }
-            setGradient(index)
+            setColor(index)
             canvas.drawArc(
                 0f, 0f,
-                width.toFloat(), height.toFloat(),
-                currentAngle, angle,
+                availableSize.toFloat(), availableSize.toFloat(),
+                sectorsAngles[index].first,
+                sectorsAngles[index].second - sectorsAngles[index].first,
                 true,
-                randomColorPaint,
+                sectorColorPaint,
             )
             if (viewState.selectedSector == index) {
                 canvas.drawArc(
                     0f, 0f,
-                    width.toFloat(), height.toFloat(),
-                    currentAngle, angle,
+                    availableSize.toFloat(), availableSize.toFloat(),
+                    sectorsAngles[index].first,
+                    sectorsAngles[index].second - sectorsAngles[index].first,
                     true,
                     sectorSelectionPaint,
                 )
             }
-            currentAngle += angle
         }
-        calculatedAngles = true
     }
 
     private fun drawCenter(canvas: Canvas) {
         canvas.drawCircle(
-            width / 2f,
-            height / 2f,
-            width / 2.7f,
+            availableSize / 2f,
+            availableSize / 2f,
+            availableSize / 2.7f,
             backgroundPaint
         )
         canvas.drawText(
-            "${viewState.amountSum} ${viewState.data.currencySymbol}",
-            width / 2f,
-            height / 2f,
+            viewState.amountText,
+            availableSize / 2f,
+            availableSize / 2f,
             headerPaint,
         )
         canvas.drawText(
-            context.getString(R.string.pie_chart_spend_text, MONTHS[viewState.data.month]),
-            width / 2f,
-            height / 2f + headerPaint.textSize / 2 + height / 20f,
+            viewState.monthText,
+            availableSize / 2f,
+            availableSize / 2f + headerPaint.textSize / 2 + availableSize / 20f,
             subtitlePaint,
         )
     }
